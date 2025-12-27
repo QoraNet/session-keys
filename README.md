@@ -1,4 +1,4 @@
-# Qora Single-Use Session Keys Protocol
+# Qora Single-Use Session Keys Protocol with Optional Split Key Support
 
 ## One Key. One Transaction. Zero Risk.
 
@@ -6,6 +6,23 @@
 **Authors:** Qora Network Contributors  
 **Status:** Draft Proposal  
 **Created:** December 2024
+Features
+1. Single-Use Session Keys (Always Active)
+Every session key created in this module:
+
+Can only be used for ONE transaction
+Is automatically DELETED after use
+Has a short expiry time (default: 60 seconds)
+Is restricted by permissions (amount, recipient, contract)
+
+2. Split Keys (Optional - With Auth App)
+When users enable the Auth App:
+
+Session keys are split between Wallet (Part 1) and Auth App (Part 2)
+Both parts are required to complete a transaction
+Auth App receives push notifications for approval
+Transactions stay PENDING until approved
+Pending transactions EXPIRE after 5 minutes
 
 ---
 
@@ -1051,7 +1068,77 @@ func (k Keeper) ExecuteWithSingleUseKey(
 │                                                                             │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
+Normal Mode (No Auth App)
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│   WALLET                          BLOCKCHAIN                                │
+│     │                                  │                                    │
+│     │  1. Create Session Key           │                                    │
+│     │  ───────────────────────────────►│                                    │
+│     │                                  │ Store key (STATUS_ACTIVE)          │
+│     │                                  │                                    │
+│     │  2. Execute Transaction          │                                    │
+│     │  ───────────────────────────────►│                                    │
+│     │                                  │ Validate & Execute                 │
+│     │                                  │                                    │
+│     │                                  │ ████ DELETE KEY ████               │
+│     │                                  │                                    │
+│     │  3. Success                      │                                    │
+│     │  ◄───────────────────────────────│                                    │
+│     │                                  │                                    │
+│                                                                             │
+│   TOTAL TIME: ~200ms                                                        │
+│   KEY LIFETIME: ~200ms                                                      │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Split Key Mode (With Auth App)
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│   WALLET              AUTH APP              BLOCKCHAIN                      │
+│     │                    │                       │                          │
+│     │  1. Create Split Session Key               │                          │
+│     │  ─────────────────────────────────────────►│                          │
+│     │                    │                       │ Store key (PENDING)      │
+│     │                    │                       │                          │
+│     │       Push Notification                    │                          │
+│     │  ─────────────────►│                       │                          │
+│     │                    │                       │                          │
+│     │              User Approves                 │                          │
+│     │              (Fingerprint)                 │                          │
+│     │                    │                       │                          │
+│     │                    │  2. Approve (Part 2)  │                          │
+│     │                    │  ────────────────────►│                          │
+│     │                    │                       │ Combine Parts            │
+│     │                    │                       │ STATUS_ACTIVE            │
+│     │                    │                       │                          │
+│     │  3. Execute Transaction                    │                          │
+│     │  ─────────────────────────────────────────►│                          │
+│     │                    │                       │ Validate & Execute       │
+│     │                    │                       │                          │
+│     │                    │                       │ ████ DELETE KEY ████     │
+│     │                    │                       │                          │
+│     │  4. Success                                │                          │
+│     │  ◄─────────────────────────────────────────│                          │
+│                                                                             │
+│   PENDING TIME: Up to 5 minutes                                             │
+│   KEY LIFETIME: ~200ms after approval                                       │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
 ```
+Security Features
+5 Layers of Security
+
+Single-Use Keys: Each key works for exactly ONE transaction
+Auto-Delete: Keys are automatically deleted after use
+Split Keys: Requires both wallet + auth app (optional)
+Biometric: Auth app requires fingerprint/face ID
+Expiration: Keys and pending transactions expire quickly
+
+Attack Scenarios
+AttackWithout SplitWith SplitSteal wallet1 tx loss (max)0 loss (need auth app)Steal phoneN/A0 loss (need wallet)Steal both1 tx loss (max)0 loss (need biometric)MitMKey deletedKeys combined on-chainMalware1 tx loss (max)User sees notification, can reject
 
 ---
 
